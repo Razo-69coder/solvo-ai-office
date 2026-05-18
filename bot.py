@@ -152,7 +152,7 @@ async def handle_message(message: Message):
     if pending:
         del _pending_approvals[user_id]
         await message.answer("✏️ Принял правки. Перезапускаю Visual Strategist...")
-        new_brief = await visual_strategist.run(pending["request"], feedback=text)
+        new_brief = await visual_strategist.run(pending["request"], feedback=text, current_brief=pending.get("visual_brief"))
         _pending_approvals[user_id] = {**pending, "visual_brief": new_brief}
         await message.answer(new_brief)
         await message.answer("✅ Напиши <b>«Го»</b> чтобы утвердить, или напиши что ещё поменять.")
