@@ -12,7 +12,7 @@ async def run(request: str) -> str:
     if not ANTHROPIC_API_KEY:
         return "⚠️ Orchestrator: Claude API ключ не настроен"
     resp = await client.messages.create(
-        model="claude-sonnet-4-20250514",
+        model="claude-haiku-4-5-20251001",
         max_tokens=500,
         system=PROMPT,
         messages=[{"role": "user", "content": request}],

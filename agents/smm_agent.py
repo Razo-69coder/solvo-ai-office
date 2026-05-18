@@ -13,8 +13,8 @@ async def run(request: str, scripts: str = "", strategy: str = "") -> str:
         return "⚠️ SMM Agent: Claude API ключ не настроен"
     context = f"Задача: {request}\n\nСтратегия:\n{strategy}\n\nСценарии:\n{scripts}" if scripts or strategy else request
     resp = await client.messages.create(
-        model="claude-sonnet-4-20250514",
-        max_tokens=2000,
+        model="claude-haiku-4-5-20251001",
+        max_tokens=1500,
         system=PROMPT,
         messages=[{"role": "user", "content": context}],
     )

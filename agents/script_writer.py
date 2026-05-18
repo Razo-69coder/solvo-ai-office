@@ -13,7 +13,7 @@ async def run(request: str) -> str:
         return "⚠️ Script Writer: Claude API ключ не настроен"
     resp = await client.messages.create(
         model="claude-sonnet-4-20250514",
-        max_tokens=4000,
+        max_tokens=2000,
         system=PROMPT,
         messages=[{"role": "user", "content": request}],
     )
