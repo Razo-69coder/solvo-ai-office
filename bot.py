@@ -1,16 +1,22 @@
 import asyncio
+import re
+
 from aiogram import Bot, Dispatcher, types
 from aiogram.filters import Command
 from aiogram.types import Message
 
 from config import BOT_TOKEN, ADMIN_TG_ID
 from database import create_task, update_task_status, save_result, get_recent_tasks
-from agents import orchestrator, strategist, script_writer, smm_agent, video_agent
+from agents import orchestrator, strategist, script_writer, smm_agent, video_agent, visual_strategist
 
 bot = Bot(token=BOT_TOKEN)
 dp = Dispatcher()
 
 MAX_LENGTH = 4096
+VIDEO_KEYWORDS = re.compile(r"\b(видео|ролик|снять|сделай\s*контент|reels|shorts|tiktok)\b", re.IGNORECASE)
+APPROVAL_WORDS = re.compile(r"^(го|ок|давай|yes|go|ok|okay|good|да)$", re.IGNORECASE)
+
+_pending_approvals: dict[int, dict] = {}
 
 
 async def notify_admin(text: str):
@@ -31,7 +37,7 @@ async def cmd_start(message: Message):
         "• «Стратегия продвижения Solvo Beauty в TikTok»\n\n"
         "Команды:\n"
         "/status — последние задачи\n"
-        "/help — подробнее о возможностях",
+        "/help — подробнее о возможностях"
     )
 
 
@@ -42,10 +48,11 @@ async def cmd_help(message: Message):
         "Ты пишешь задачу — запускается команда AI-агентов:\n\n"
         "🧠 <b>Оркестратор</b> — анализирует задачу и строит план\n"
         "📊 <b>Стратегист</b> — определяет когорту аудитории и платформу\n"
+        "🎨 <b>Visual Strategist</b> — дизайн-бриф на 10 видео (если задача про видео)\n"
         "✍️ <b>Сценарист</b> — пишет сценарии для Reels/TikTok/Shorts\n"
         "📱 <b>SMM Agent</b> — создаёт контент-план и расписание\n"
-        "🎬 <b>Video Agent</b> — генерирует видео (требуется Higgsfield API)\n\n"
-        "Все агенты работают параллельно. Результат — одно большое сообщение.",
+        "🎬 <b>Video Agent</b> — генерирует видео через Higgsfield (Kling + Virality + Veo 3)\n\n"
+        "Все агенты работают параллельно. Результат — одно большое сообщение."
     )
 
 
@@ -66,21 +73,12 @@ async def cmd_status(message: Message):
     await message.answer("\n".join(lines))
 
 
-@dp.message()
-async def handle_task(message: Message):
-    user_id = message.from_user.id
-    request = message.text.strip()
-    if not request:
-        return
-
-    task_id = await create_task(user_id, request)
+async def _run_full_pipeline(request: str, task_id: int, message: Message):
     await update_task_status(task_id, "processing")
-    status_msg = await message.answer(
-        f"⚙️ Офис принял задачу <b>#{task_id}</b>.\nЗапускаю агентов..."
-    )
+    status_msg = await message.answer("⚙️ Запускаю агентов...")
 
     await notify_admin(
-        f"📥 Новая задача #{task_id} от @{message.from_user.username or 'unknown'}: {request[:200]}"
+        f"📥 Задача #{task_id} от @{message.from_user.username or 'unknown'}: {request[:200]}"
     )
 
     orchest_task = asyncio.create_task(orchestrator.run(request))
@@ -129,3 +127,43 @@ async def handle_task(message: Message):
             await message.answer(full_text[i:i + MAX_LENGTH])
 
     await notify_admin(f"✅ Задача #{task_id} выполнена")
+
+
+@dp.message()
+async def handle_message(message: Message):
+    user_id = message.from_user.id
+    text = message.text.strip()
+    if not text:
+        return
+
+    pending = _pending_approvals.get(user_id)
+
+    if pending and APPROVAL_WORDS.match(text):
+        del _pending_approvals[user_id]
+        await message.answer("✅ Дизайн утверждён. Запускаю полный пайплайн...")
+        await _run_full_pipeline(pending["request"], pending["task_id"], message)
+        return
+
+    if pending:
+        del _pending_approvals[user_id]
+        await message.answer("✏️ Принял правки. Перезапускаю Visual Strategist...")
+        new_brief = await visual_strategist.run(pending["request"], feedback=text)
+        _pending_approvals[user_id] = {**pending, "visual_brief": new_brief}
+        await message.answer(new_brief)
+        return
+
+    task_id = await create_task(user_id, text)
+
+    if VIDEO_KEYWORDS.search(text):
+        await update_task_status(task_id, "processing")
+        status_msg = await message.answer("🎨 Запускаю Visual Strategist...")
+        brief = await visual_strategist.run(text)
+        await status_msg.delete()
+        await message.answer(brief)
+        _pending_approvals[user_id] = {"request": text, "task_id": task_id, "visual_brief": brief}
+        await notify_admin(
+            f"🎨 Visual Strategist от @{message.from_user.username or 'unknown'}: {text[:200]}"
+        )
+        return
+
+    await _run_full_pipeline(text, task_id, message)
