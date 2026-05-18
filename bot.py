@@ -140,8 +140,13 @@ async def handle_message(message: Message):
 
     if pending and APPROVAL_WORDS.match(text):
         del _pending_approvals[user_id]
-        await message.answer("✅ Дизайн утверждён. Запускаю полный пайплайн...")
-        await _run_full_pipeline(pending["request"], pending["task_id"], message)
+        brief = pending.get("visual_brief", pending["request"])
+        await message.answer("✅ Бриф утверждён! Генерирую промпт для Higgsfield Supercomputer...")
+        prompt = await video_agent.run(brief)
+        await message.answer(
+            f"✅ Бриф утверждён! Вот промпт для Higgsfield Supercomputer:\n\n{prompt}\n\n"
+            "👆 Скопируй этот промпт, загрузи мокапы и вставь в higgsfield.ai/supercomputer"
+        )
         return
 
     if pending:
