@@ -39,7 +39,7 @@ async def lifespan(app: FastAPI):
 
     if WEBHOOK_URL:
         webhook_url = f"{WEBHOOK_URL}/webhook"
-        await bot.set_webhook(url=webhook_url, secret_token=BOT_TOKEN[:32])
+        await bot.set_webhook(url=webhook_url)
         logger.info(f"Webhook set to {webhook_url}")
     else:
         logger.warning("WEBHOOK_URL not set, bot will not receive updates")
@@ -61,9 +61,7 @@ app.add_middleware(
 
 @app.post("/webhook")
 async def telegram_webhook(request: Request):
-    secret = request.headers.get("X-Telegram-Bot-Api-Secret-Token", "")
-    if secret and secret != BOT_TOKEN[:32]:
-        return {"ok": False}
+    pass
     data = await request.json()
     update = Update.model_validate(data)
     await dp.feed_update(bot, update)
